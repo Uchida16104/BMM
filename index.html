@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ja" x-data="manualApp()" x-init="init()" :lang="language">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title x-text="t('appTitle')">業務マニュアル Manager</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="https://unpkg.com/htmx.org@2.0.6"></script>
+  <script src="https://unpkg.com/hyperscript.org@0.9.14"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://pyscript.net/releases/2026.3.1/core.js" type="module"></script>
+</head>
+
+<body class="min-h-screen bg-slate-100 text-slate-900">
+<div id="vue-shell">
+  <header class="bg-slate-900 text-white shadow">
+    <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4">
+      <div>
+        <h1 class="text-xl font-bold" x-text="t('appTitle')"></h1>
+        <p class="text-xs text-slate-300">Tkinter + Flask + PyScript + HTMX + _hyperscript + Tailwind CSS + Alpine.js + Vue.js + TypeScript</p>
+      </div>
+      <div class="flex gap-2">
+        <button class="rounded-lg border border-slate-600 px-3 py-2 text-sm hover:bg-slate-800"
+                @click="setLanguage('ja')">日本語</button>
+        <button class="rounded-lg border border-slate-600 px-3 py-2 text-sm hover:bg-slate-800"
+                @click="setLanguage('en')">English</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto grid max-w-7xl gap-4 px-4 py-6 lg:grid-cols-[360px_1fr]">
+    <aside class="rounded-2xl bg-white p-4 shadow">
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="font-bold" x-text="t('manuals')"></h2>
+        <button @click="newManual()" class="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                x-text="t('new')"></button>
+      </div>
+
+      <input x-model="query" @input.debounce.250ms="loadManuals()"
+             class="mb-3 w-full rounded-lg border px-3 py-2 outline-none focus:ring"
+             :placeholder="t('search')">
+
+      <select x-model="category" @change="loadManuals()"
+              class="mb-3 w-full rounded-lg border px-3 py-2">
+        <option value="" x-text="t('allCategories')"></option>
+        <option value="基本">基本</option>
+        <option value="安全">安全</option>
+        <option value="接客">接客</option>
+        <option value="IT">IT</option>
+      </select>
+
+      <div class="space-y-2">
+        <template x-for="manual in manuals" :key="manual.id">
+          <button @click="selectManual(manual)"
+                  class="w-full rounded-xl border p-3 text-left transition hover:bg-slate-50"
+                  :class="selected?.id === manual.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200'">
+            <div class="font-semibold" x-text="manual.title"></div>
+            <div class="mt-1 text-xs text-slate-500">
+              <span x-text="manual.category"></span> · <span x-text="manual.updated_at"></span>
+            </div>
+          </button>
+        </template>
+        <p x-show="manuals.length === 0" class="py-8 text-center text-sm text-slate-500" x-text="t('noManuals')"></p>
+      </div>
+    </aside>
+
+    <section class="rounded-2xl bg-white p-5 shadow">
+      <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-lg font-bold" x-text="selected ? t('edit') : t('create')"></h2>
+          <p class="text-sm text-slate-500" x-text="selected?.updated_at || ''"></p>
+        </div>
+        <div class="flex gap-2">
+          <button @click="saveManual()" class="rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700"
+                  x-text="t('save')"></button>
+          <button @click="deleteManual()" x-show="selected"
+                  class="rounded-lg bg-rose-600 px-4 py-2 font-semibold text-white hover:bg-rose-700"
+                  x-text="t('delete')"></button>
+        </div>
+      </div>
+
+      <div class="grid gap-4">
+        <label>
+          <span class="mb-1 block text-sm font-semibold" x-text="t('title')"></span>
+          <input x-model="form.title" class="w-full rounded-lg border px-3 py-2">
+        </label>
+
+        <label>
+          <span class="mb-1 block text-sm font-semibold" x-text="t('category')"></span>
+          <input x-model="form.category" list="category-list" class="w-full rounded-lg border px-3 py-2">
+          <datalist id="category-list">
+            <option value="基本"><option value="安全"><option value="接客"><option value="IT">
+          </datalist>
+        </label>
+
+        <label>
+          <span class="mb-1 block text-sm font-semibold" x-text="t('body')"></span>
+          <textarea x-model="form.body" rows="18" class="w-full rounded-lg border px-3 py-2 font-mono"></textarea>
+        </label>
+
+        <div class="rounded-xl bg-slate-50 p-4">
+          <h3 class="mb-2 font-bold" x-text="t('preview')"></h3>
+          <article class="whitespace-pre-wrap text-sm leading-7" x-text="form.body"></article>
+        </div>
+      </div>
+
+      <div id="htmx-status" class="mt-4 text-xs text-slate-500"
+           hx-get="/health" hx-trigger="load" hx-swap="outerHTML">
+        <span x-text="t('checking')"></span>
+      </div>
+
+      <div class="mt-4 rounded-xl border border-dashed p-4 text-sm text-slate-500">
+        <p><strong>HTMX / _hyperscript:</strong> CRUDはFetch + Alpine.jsを中心に実装し、HTMXはヘルスチェック、_hyperscriptは補助UI、Vue.jsはシェル初期化に使用しています。</p>
+        <p class="mt-1"><strong>PyScript / TypeScript:</strong> この構成は段階的にPython/TypeScriptロジックを追加できるようCDNを読み込んでいます。</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+function manualApp() {
+  return {
+    language: localStorage.getItem('manual-language') || 'ja',
+    query: '',
+    category: '',
+    manuals: [],
+    selected: null,
+    form: { title: '', category: '基本', body: '' },
+
+    dict: {
+      ja: {
+        appTitle: '業務マニュアル Manager',
+        manuals: 'マニュアル一覧',
+        new: '新規作成',
+        search: 'タイトル・本文を検索',
+        allCategories: 'すべてのカテゴリ',
+        noManuals: 'マニュアルがありません。',
+        edit: 'マニュアル編集',
+        create: 'マニュアル新規作成',
+        save: '保存',
+        delete: '削除',
+        title: 'タイトル',
+        category: 'カテゴリ',
+        body: '本文',
+        preview: '参照プレビュー',
+        checking: 'サーバー状態を確認中…'
+      },
+      en: {
+        appTitle: 'Business Manual Manager',
+        manuals: 'Manuals',
+        new: 'New',
+        search: 'Search title or body',
+        allCategories: 'All categories',
+        noManuals: 'No manuals.',
+        edit: 'Edit Manual',
+        create: 'Create Manual',
+        save: 'Save',
+        delete: 'Delete',
+        title: 'Title',
+        category: 'Category',
+        body: 'Body',
+        preview: 'Preview',
+        checking: 'Checking server status…'
+      }
+    },
+
+    t(key) {
+      return this.dict[this.language]?.[key] || key;
+    },
+
+    setLanguage(lang) {
+      this.language = lang;
+      localStorage.setItem('manual-language', lang);
+    },
+
+    async init() {
+      await this.loadManuals();
+    },
+
+    async loadManuals() {
+      const params = new URLSearchParams();
+      if (this.query) params.set('q', this.query);
+      if (this.category) params.set('category', this.category);
+      const response = await fetch('/api/manuals?' + params.toString());
+      this.manuals = await response.json();
+      if (this.selected) {
+        this.selected = this.manuals.find(x => x.id === this.selected.id) || null;
+      }
+    },
+
+    selectManual(manual) {
+      this.selected = manual;
+      this.form = {
+        title: manual.title,
+        category: manual.category,
+        body: manual.body
+      };
+    },
+
+    newManual() {
+      this.selected = null;
+      this.form = { title: '', category: '基本', body: '' };
+    },
+
+    async saveManual() {
+      if (!this.form.title.trim()) {
+        alert(this.language === 'ja' ? 'タイトルを入力してください。' : 'Please enter a title.');
+        return;
+      }
+
+      const method = this.selected ? 'PUT' : 'POST';
+      const url = this.selected ? `/api/manuals/${this.selected.id}` : '/api/manuals';
+      const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(this.form)
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || 'Error');
+        return;
+      }
+
+      this.selected = data;
+      await this.loadManuals();
+      this.selectManual(data);
+    },
+
+    async deleteManual() {
+      if (!this.selected) return;
+      const message = this.language === 'ja'
+        ? 'このマニュアルを削除しますか？'
+        : 'Delete this manual?';
+      if (!confirm(message)) return;
+
+      const response = await fetch(`/api/manuals/${this.selected.id}`, { method: 'DELETE' });
+      if (response.ok) {
+        this.newManual();
+        await this.loadManuals();
+      }
+    }
+  };
+}
+
+// Vue.js shell: the main state remains Alpine.js so HTMX/_hyperscript can coexist cleanly.
+Vue.createApp({
+  mounted() {
+    document.documentElement.dataset.vueReady = 'true';
+  }
+}).mount('#vue-shell');
+</script>
+</body>
+</html>
